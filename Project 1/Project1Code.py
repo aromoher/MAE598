@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # environment parameters
 
 FRAME_TIME = 0.1  # time interval
-GRAVITY_ACCEL = 0.12  # gravity constant
+GRAVITY_ACCEL = 9.8  # gravity constant (m/s^2)
 BOOST_ACCEL = 0.18  # thrust constant
 
 # # the following parameters are not being used in the sample code
