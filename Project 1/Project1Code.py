@@ -17,20 +17,13 @@ logger = logging.getLogger(__name__)
 
 # environment parameters
 
-FRAME_TIME = 0.1  # time interval
-GRAVITY_ACCEL = 9.8  # gravity constant (m/s^2)
-BOOST_ACCEL = 0.18  # thrust constant
-
-# ROTATION_ACCEL = 20  # rotation constant
+FRAME_TIME = 0.01  # time interval
+GRAVITY_ACCEL = 9.81/1000  # gravity constant
+BOOST_ACCEL = 14.715/1000  # thrust constant, from class announcementt
 
 #*********************************************************************************************************
 
-# define system dynamics
-# Notes: 
-# 0. You only need to modify the "forward" function
-# 1. All variables in "forward" need to be PyTorch tensors.
-# 2. All math operations in "forward" has to be differentiable, e.g., default PyTorch functions.
-# 3. Do not use inplace operations, e.g., x += 1. Please see the following section for an example that does not work.
+# system dynamics
 
 class Dynamics(nn.Module):
 
@@ -38,64 +31,49 @@ class Dynamics(nn.Module):
         super(Dynamics, self).__init__()
 
     @staticmethod
-    def forward(state, action):   #customize
+    def forward(state, action):  
 
         """
-        action: thrust or no thrust
-        state[0] = y
-        state[1] = y_dot
+        action[0] = thrust controller 
+        action[1] = delta theta controller (change in angle)
+        state[0] = x
+        state[1] = y
+        state[2] = x_dot (velocity in the x dir)
+        state[3] = y_dot (velocity in the y dir)
+        state[4] = theta
         """
         
-        # Apply gravity
-        # Note: Here gravity is used to change velocity which is the second element of the state vector
-        # Normally, we would do x[1] = x[1] + gravity * delta_time
-        # but this is not allowed in PyTorch since it overwrites one variable (x[1]) that is part of the computational graph to be differentiated.
-        # Therefore, I define a tensor dx = [0., gravity * delta_time], and do x = x + dx. This is allowed... 
-        delta_state_gravity = t.tensor([0., GRAVITY_ACCEL * FRAME_TIME])
+        # Gravity
+        # gravity affects y_dot, so in a 5-by-1 matrix, it affects slot 4
+        delta_state_gravity = t.tensor([0., 0., 0., -GRAVITY_ACCEL * FRAME_TIME, 0.])
+        
+        # Theta
+        # Note: this is not delta_theta but rather the change from time step to time step
+        delta_state_theta = FRAME_TIME * t.mul([0., 0., 0., 0., 1.], action[:, 1].reshape(-1, 1)) #don't know if 1 or -1
+        #GO BACK ON THIS
 
         # Thrust
-        # Note: Same reason as above. Need a 2-by-1 tensor.
-        delta_state = BOOST_ACCEL * FRAME_TIME * t.tensor([0., -1.]) * action
-
-        # Update velocity
-        state = state + delta_state + delta_state_gravity
+        # cos and sin are non linear, used example from slack but changed for my set up
+        N = len(state)
+        state_tensor = t.zeros((N, 5))
+        state_tensor[:, 2] = -t.sin(state[:, 4])
+        state_tensor[:, 3] = t.cos(state[:, 4])
+        delta_state = BOOST_ACCEL * FRAME_TIME * t.mul(state_tensor, action[:, 0].reshape(-1, 1))
         
-        # Update state
-        # Note: Same as above. Use operators on matrices/tensors as much as possible. Do not use element-wise operators as they are considered inplace.
-        step_mat = t.tensor([[1., FRAME_TIME],
-                            [0., 1.]])
+
+        # Velocity
+        state = state + delta_state + delta_state_gravity + delta_state_theta
+        
+        # State (for example, going from step 1 to step 2)
+        step_mat = t.tensor([[1., 0., FRAME_TIME, 0., 0.],
+                            [0., 1., 0., FRAME_TIME, 0.],
+                            [0., 0., 1., 0., 0.],
+                            [0., 0., 0., 1., 0.],
+                            [0., 0., 0., 0., 1.]])
         state = t.matmul(step_mat, state)
 
         return state
     
-#*********************************************************************************************************
-
-# Demonstrate the inplace operation issue
-
-class Dynamics(nn.Module):
-
-    def __init__(self):
-        super(Dynamics, self).__init__()
-
-    @staticmethod
-    def forward(state, action):
-
-        """
-        action: thrust or no thrust
-        state[0] = y
-        state[1] = y_dot
-        """
-
-        # Update velocity using element-wise operation. This leads to an error from PyTorch.
-        state[1] = state[1] + GRAVITY_ACCEL * FRAME_TIME - BOOST_ACCEL * FRAME_TIME * action
-        
-        # Update state
-        step_mat = t.tensor([[1., FRAME_TIME],
-                            [0., 1.]])
-        state = t.matmul(step_mat, state)
-
-        return state
-
 #*********************************************************************************************************
 
 # a deterministic controller
