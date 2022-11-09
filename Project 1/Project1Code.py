@@ -17,9 +17,9 @@ logger = logging.getLogger(__name__)
 
 # environment parameters
 
-FRAME_TIME = 0.01  # time interval
+FRAME_TIME = 1.0  # time interval
 GRAVITY_ACCEL = 9.81/1000  # gravity constant
-BOOST_ACCEL = 14.715/1000  # thrust constant, from class announcementt
+BOOST_ACCEL = 14.715/1000  # thrust constant, from class announcement
 
 #*********************************************************************************************************
 
@@ -53,7 +53,7 @@ class Dynamics(nn.Module):
         #GO BACK ON THIS
 
         # Thrust
-        # cos and sin are non linear, used example from slack but changed for my set up
+        # cos and sin are non linear, used example from slack but changed for my set up below
         N = len(state)
         state_tensor = t.zeros((N, 5))
         state_tensor[:, 2] = -t.sin(state[:, 4])
@@ -96,7 +96,7 @@ class Controller(nn.Module):
             nn.Linear(dim_input, dim_hidden),
             nn.Tanh(),
             nn.Linear(dim_hidden, dim_output),
-            # You can add more layers here
+            # You can add more layers here ************************************************************************** edit, don't fully understand this?
             nn.Sigmoid()
         )
 
@@ -133,13 +133,12 @@ class Simulation(nn.Module):
         return self.error(state)
 
     @staticmethod
-    def initialize_state():   #customize
-        state = [1., 0.]  # TODO: need batch of initial states
+    def initialize_state():   
+        state = [1., 1., 1., 1., 0.]  # set the initial states ******************** [x, y, x_dot, y_dot, theta] make sure the orientation and the y-velocity match directions
         return t.tensor(state, requires_grad=False).float()
 
     def error(self, state):
-        return state[0]**2 + state[1]**2
-
+        return state[0]**2 + state[1]**2 + state[2]**2 + state[3]**2 + state[4]**2
 
 #*********************************************************************************************************
 
@@ -155,7 +154,7 @@ class Optimize:
     def __init__(self, simulation):
         self.simulation = simulation
         self.parameters = simulation.controller.parameters()
-        self.optimizer = optim.LBFGS(self.parameters, lr=0.01)
+        self.optimizer = optim.LBFGS(self.parameters, lr=0.01) #set learning rate here *********************************************************
 
     def step(self):
         def closure():
@@ -172,10 +171,14 @@ class Optimize:
             print('[%d] loss: %.3f' % (epoch + 1, loss))
             self.visualize()
 
-    def visualize(self):       #customize
+    def visualize(self):       #customize: add graph or line for every state and add labels ******************************************************
         data = np.array([self.simulation.state_trajectory[i].detach().numpy() for i in range(self.simulation.T)])
+        # labeling data [x, y, x_dot, y_dot, theta]
         x = data[:, 0]
         y = data[:, 1]
+        x_dot = data[:, 2]
+        y_dot = data[:, 3]
+        theta = data[:, 4]
         plt.plot(x, y)
         plt.show()
         
@@ -185,9 +188,9 @@ class Optimize:
 
 # Now it's time to run the code!
 
-T = 100  # number of time steps
-dim_input = 2  # state space dimensions
-dim_hidden = 6  # latent dimensions
+T = 20  # number of time steps
+dim_input = 4  # state space dimensions
+dim_hidden = 4  # latent dimensions
 dim_output = 1  # action space dimensions
 d = Dynamics()  # define dynamics
 c = Controller(dim_input, dim_hidden, dim_output)  # define controller
