@@ -56,14 +56,14 @@ class Dynamics(nn.Module):
         state_tensor[1, 0] = t.cos(state[4]) 
         state_tensor[3, 0] = t.cos(state[4]) 
         state_tensor[4, 1] = 1
-        delta_state = BOOST_ACCEL * FRAME_TIME * t.matmul(state_tensor, action[0]) #redo
+        delta_state = BOOST_ACCEL * FRAME_TIME * t.matmul(state_tensor, action) #redo
         
         # Theta
         # Note: this is not delta_theta but rather the change from time step to time step
-        delta_state_theta = FRAME_TIME * t.matmul(t.tensor([0., 0., 0., 0., 1.]), action[1]) #don't know if 1 or -1, redooo
+        #delta_state_theta = FRAME_TIME * t.matmul(t.tensor([0., 0., 0., 0., 1.]), action[1,0]) #don't know if 1 or -1, redooo
 
         # Velocity
-        state = state + delta_state + delta_state_gravity + delta_state_theta
+        state = state + delta_state + delta_state_gravity #+ delta_state_theta
         
         # State (for example, going from step 1 to step 2)
         step_mat = t.tensor([[1., 0., FRAME_TIME, 0., 0.],
@@ -192,10 +192,10 @@ class Optimize:
 
 T = 20  # number of time steps
 dim_input = 5  # state space dimensions
-dim_hidden = 10  # latent dimensions
+dim_hidden = 60  # latent dimensions
 dim_output = 2  # action space dimensions
 d = Dynamics()  # define dynamics
 c = Controller(dim_input, dim_hidden, dim_output)  # define controller
 s = Simulation(c, d, T)  # define simulation
 o = Optimize(s)  # define optimizer
-o.train(40)  # solve the optimization problem
+o.train(5)  # solve the optimization problem
