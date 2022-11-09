@@ -3,13 +3,14 @@
 import logging
 import math
 import random
-import numpy as np
 import time
+
+import matplotlib.pyplot as plt
+import numpy as np
 import torch as t
 import torch.nn as nn
 from torch import optim
 from torch.nn import utils
-import matplotlib.pyplot as plt
 
 logger = logging.getLogger(__name__)
 
@@ -49,17 +50,17 @@ class Dynamics(nn.Module):
         
         # Thrust
         # cos and sin are non linear, used example from slack but changed for my set up below
-        N = len(state)
-        state_tensor = t.zeros((N, 5))
-        state_tensor[:, 2] = -t.sin(state[:, 4])
-        state_tensor[:, 3] = t.cos(state[:, 4])
-        delta_state = BOOST_ACCEL * FRAME_TIME * t.mul(state_tensor, action[:, 0].reshape(-1, 1))
+        state_tensor = t.zeros((5, 2))
+        state_tensor[0, 0] = -t.sin(state[4]) 
+        state_tensor[2, 0] = -t.sin(state[4]) 
+        state_tensor[1, 0] = t.cos(state[4]) 
+        state_tensor[3, 0] = t.cos(state[4]) 
+        state_tensor[4, 1] = 1
+        delta_state = BOOST_ACCEL * FRAME_TIME * t.matmul(state_tensor, action[0]) #redo
         
         # Theta
         # Note: this is not delta_theta but rather the change from time step to time step
-        delta_state_theta = FRAME_TIME * t.mul(t.tensor([0., 0., 0., 0., 1.]), action[:, 1].reshape(-1, 1)) #don't know if 1 or -1
-        #GO BACK ON THIS
-
+        delta_state_theta = FRAME_TIME * t.matmul(t.tensor([0., 0., 0., 0., 1.]), action[1]) #don't know if 1 or -1, redooo
 
         # Velocity
         state = state + delta_state + delta_state_gravity + delta_state_theta
@@ -70,7 +71,7 @@ class Dynamics(nn.Module):
                             [0., 0., 1., 0., 0.],
                             [0., 0., 0., 1., 0.],
                             [0., 0., 0., 0., 1.]])
-        state = t.matmul(step_mat, state)
+        state = t.matmul(step_mat, state.T)
 
         return state
     
