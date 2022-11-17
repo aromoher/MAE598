@@ -34,46 +34,41 @@ class Dynamics(nn.Module):
     @staticmethod
     def forward(state, action):  
 
-        """
-        action[0] = thrust controller 
-        action[1] = delta theta controller (change in angle)
-        state[0] = x
-        state[1] = y
-        state[2] = x_dot (velocity in the x dir)
-        state[3] = y_dot (velocity in the y dir)
+       """
+       action[0] = thrust controller
+       action[1] = omega controller
+       state[0] = x
+       state[1] = x_dot
+       state[2] = y
+        state[3] = y_dot
         state[4] = theta
         """
-        
-        # Gravity
-        # gravity affects y_dot, so in a 5-by-1 matrix, it affects slot 4
-        delta_state_gravity = t.tensor([0., 0., 0., -GRAVITY_ACCEL * FRAME_TIME, 0.])
-        
+        # Apply gravity
+        # Note: Here gravity is used to change velocity which is the second element of the state vector
+        # Normally, we would do x[1] = x[1] + gravity * delta_time
+        # but this is not allowed in PyTorch since it overwrites one variable (x[1]) that is part of the computational graph to be differentiated.
+        # Therefore, I define a tensor dx = [0., gravity * delta_time], and do x = x + dx. This is allowed...
+       delta_state_gravity = t.tensor([0., 0., 0., -GRAVITY_ACCEL * FRAME_TIME, 0.])
         # Thrust
-        # cos and sin are non linear, used example from slack but changed for my set up below
-        state_tensor = t.zeros((5, 2))
-        state_tensor[0, 0] = -t.sin(state[4]) 
-        state_tensor[2, 0] = -t.sin(state[4]) 
-        state_tensor[1, 0] = t.cos(state[4]) 
-        state_tensor[3, 0] = t.cos(state[4]) 
-        state_tensor[4, 1] = 1
-        delta_state = BOOST_ACCEL * FRAME_TIME * t.matmul(state_tensor, action) #redo
-        
+        # Note: Same reason as above. Need a 5-by-1 tensor.
+       N = len(state)
+       state_tensor = t.zeros((N, 5))
+       state_tensor[:, 1] = -t.sin(state[:, 4])
+       state_tensor[:, 3] = t.cos(state[:, 4])
+       delta_state = BOOST_ACCEL * FRAME_TIME * t.mul(state_tensor, action[:, 0].reshape(-1, 1))
         # Theta
-        # Note: this is not delta_theta but rather the change from time step to time step
-        #delta_state_theta = FRAME_TIME * t.matmul(t.tensor([0., 0., 0., 0., 1.]), action[1,0]) #don't know if 1 or -1, redooo
+       delta_state_theta = FRAME_TIME * t.mul(t.tensor([0., 0., 0., 0, -1.]), action[:, 1].reshape(-1, 1))
+       state = state + delta_state + delta_state_gravity + delta_state_theta
+        # Update state
+       step_mat = t.tensor([[1., FRAME_TIME, 0., 0., 0.],
+                                [0., 1., 0., 0., 0.],
+                                [0., 0., 1., FRAME_TIME, 0.],
+                                [0., 0., 0., 1., 0.],
+                                [0., 0., 0., 0., 1.]])
+       state = t.matmul(step_mat, state.T)
 
-        # Velocity
-        state = state + delta_state + delta_state_gravity #+ delta_state_theta
-        
-        # State (for example, going from step 1 to step 2)
-        step_mat = t.tensor([[1., 0., FRAME_TIME, 0., 0.],
-                            [0., 1., 0., FRAME_TIME, 0.],
-                            [0., 0., 1., 0., 0.],
-                            [0., 0., 0., 1., 0.],
-                            [0., 0., 0., 0., 1.]])
-        state = t.matmul(step_mat, state.T)
 
-        return state
+       return state
     
 
 #*********************************************************************************************************
@@ -136,7 +131,7 @@ class Simulation(nn.Module):
 
     @staticmethod
     def initialize_state():   
-        state = [1., 1., 1., 1., 0.]  # set the initial states ******************** [x, y, x_dot, y_dot, theta] make sure the orientation and the y-velocity match directions
+        state = [1., 1., 0., 0., 0.]  # set the initial states ******************** [x, y, x_dot, y_dot, theta] make sure the orientation and the y-velocity match directions
         return t.tensor(state, requires_grad=False).float()
 
     def error(self, state):
@@ -181,7 +176,7 @@ class Optimize:
         x_dot = data[:, 2]
         y_dot = data[:, 3]
         theta = data[:, 4]
-        plt.plot(x, y)
+        plt.plot(y, y_dot)
         plt.show()
         
         
@@ -198,4 +193,4 @@ d = Dynamics()  # define dynamics
 c = Controller(dim_input, dim_hidden, dim_output)  # define controller
 s = Simulation(c, d, T)  # define simulation
 o = Optimize(s)  # define optimizer
-o.train(10)  # solve the optimization problem
+o.train(5)  # solve the optimization problem
