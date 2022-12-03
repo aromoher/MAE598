@@ -65,6 +65,8 @@ while t.norm(gL) > e:
     y = g_new - g_old
     print('y = ', y)
     S = x - x_old 
+    if S[0] == 0:
+        S[0] = -0.0001
     print('S = ', S)
     W_old = W
     first_Term = t.matmul(y, t.transpose(y, 0, 1))/t.matmul(t.transpose(y, 0, 1),S)
